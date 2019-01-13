@@ -1,0 +1,15 @@
+[package]
+name = "rit-launcher"
+version = "0.1.0"
+authors = ["Milkey Mouse <milkeymouse@meme.institute>"]
+edition = "2018"
+
+[lib]
+name = "rit_launcher"
+path = "lib.rs"
+
+[[bin]]
+name = "rit"
+path = "main.rs"
+
+[dependencies]
