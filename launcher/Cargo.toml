@@ -13,3 +13,4 @@ name = "rit"
 path = "main.rs"
 
 [dependencies]
+quick-error = "1.2.2"
