@@ -126,3 +126,146 @@ pub fn get_default_launcher() -> impl RitLauncher {
         ],
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    quick_error! {
+        #[derive(Debug)]
+        enum TestingErrors {
+            DummyError {}
+        }
+    }
+
+    enum Should {
+        Succeed,
+        Fail,
+    }
+
+    struct DummyLauncher {
+        always: Should,
+    }
+
+    impl RitLauncher for DummyLauncher {
+        fn launch(&self, _name: &str, _args: &[String]) -> Result<(), Box<dyn Error>> {
+            match &self.always {
+                Should::Succeed => Ok(()),
+                Should::Fail => Err(Box::new(TestingErrors::DummyError {})),
+            }
+        }
+    }
+
+    #[test]
+    fn proclauncher_launches_processes() {
+        let launcher = ProcLauncher { cmd_name: "true" };
+        assert!(launcher.launch("whatever", &[]).is_ok());
+    }
+
+    #[test]
+    fn proclauncher_fails_on_nonexistent() {
+        let launcher = ProcLauncher {
+            cmd_name: "not-a-real-command",
+        };
+        assert!(launcher.launch("this-shouldnt-exist", &[]).is_err());
+    }
+
+    #[test]
+    fn liblauncher_launches_libs() {
+        let launcher = LibLauncher {};
+        assert!(launcher.launch("test", &[]).is_ok());
+    }
+
+    #[test]
+    fn liblauncher_fails_on_nonexistent() {
+        let launcher = LibLauncher {};
+        assert!(launcher.launch("this-shouldnt-exist", &[]).is_err());
+    }
+
+    #[test]
+    fn blacklistlauncher_works_on_others() {
+        let launcher = BlacklistLauncher {
+            launcher: Box::new(DummyLauncher {
+                always: Should::Succeed,
+            }),
+            blacklist: &["blacklisted"],
+        };
+        assert!(launcher.launch("not-blacklisted", &[]).is_ok());
+    }
+
+    #[test]
+    fn blacklistlauncher_fails_on_blacklisted() {
+        let launcher = BlacklistLauncher {
+            launcher: Box::new(DummyLauncher {
+                always: Should::Succeed,
+            }),
+            blacklist: &["blacklisted"],
+        };
+        assert!(launcher.launch("blacklisted", &[]).is_err());
+    }
+
+    #[test]
+    #[should_panic]
+    fn fallbacklauncher_panics_on_no_launchers() {
+        let launcher = FallbackLauncher { launchers: vec![] };
+        launcher.launch("whatever", &[]).unwrap();
+    }
+
+    #[test]
+    fn fallbacklauncher_falls_back() {
+        let launcher = FallbackLauncher {
+            launchers: vec![
+                Box::new(DummyLauncher {
+                    always: Should::Fail,
+                }),
+                Box::new(DummyLauncher {
+                    always: Should::Succeed,
+                }),
+            ],
+        };
+        assert!(launcher.launch("whatever", &[]).is_ok());
+    }
+
+    #[test]
+    fn fallbacklauncher_ultimately_fails() {
+        let launcher = FallbackLauncher {
+            launchers: vec![
+                Box::new(DummyLauncher {
+                    always: Should::Fail,
+                }),
+                Box::new(DummyLauncher {
+                    always: Should::Fail,
+                }),
+            ],
+        };
+        assert!(launcher.launch("whatever", &[]).is_err());
+    }
+
+    #[test]
+    fn dummy_launcher_combination_works() {
+        let launcher = FallbackLauncher {
+            launchers: vec![
+                Box::new(BlacklistLauncher {
+                    launcher: Box::new(DummyLauncher {
+                        always: Should::Succeed,
+                    }),
+                    blacklist: &["help"],
+                }),
+                Box::new(LibLauncher {}),
+            ],
+        };
+        assert!(launcher.launch("status", &[]).is_ok());
+    }
+
+    #[test]
+    fn default_launcher_works() {
+        let launcher = get_default_launcher();
+        assert!(launcher.launch("help", &[]).is_ok());
+    }
+
+    #[test]
+    fn default_launcher_fails_on_nonexistent() {
+        let launcher = get_default_launcher();
+        assert!(launcher.launch("not-a-real-command", &[]).is_err());
+    }
+}
